@@ -42,7 +42,10 @@ def write_or_merge_to_delta(spark: SparkSession, df: DataFrame, table_name: str,
     df = df.withColumn("load_datetime", timestamp).withColumn("updated_datetime", timestamp)
 
     if not spark.catalog.tableExists(table_name):
-        df.write.format("delta").mode("overwrite").saveAsTable(table_name)
+        df.write.format("delta") \
+            .option("delta.enableChangeDataFeed", "true") \
+            .mode("overwrite") \
+            .saveAsTable(table_name)
     else:
         delta_table = DeltaTable.forName(spark, table_name)
         if primary_key:
