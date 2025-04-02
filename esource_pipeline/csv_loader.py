@@ -86,7 +86,8 @@ def load_csv_to_delta(spark: SparkSession, file_location: str, table_name: str,
 
     file_hash = calculate_file_hash(df)
     if check_file_already_loaded(spark, load_log_table, file_hash):
-        raise Exception("Duplicate file detected — skipping load.")
+        print(f"Duplicate file detected: File '{file_location}' already loaded—skipping.")
+        return
 
     df = df.dropDuplicates(["row_hash"])
     write_or_merge_to_delta(spark, df, table_name, primary_key)
