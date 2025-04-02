@@ -5,12 +5,17 @@ from datetime import datetime
 
 
 def read_csv_to_df(spark: SparkSession, file_location: str, infer_schema: str = "true",
-                   header: str = "true", delimiter: str = ",") -> DataFrame:
-    return spark.read.format("csv") \
+                   header: str = "true", delimiter: str = ",", drop_index_column: bool = False) -> DataFrame:
+    df = spark.read.format("csv") \
         .option("inferSchema", infer_schema) \
         .option("header", header) \
         .option("sep", delimiter) \
         .load(file_location)
+
+    if drop_index_column and "_c0" in df.columns:
+        df = df.drop("_c0")
+
+    return df
 
 
 def hash_dataframe(df: DataFrame) -> DataFrame:
@@ -32,19 +37,7 @@ def check_file_already_loaded(spark: SparkSession, load_log_table: str, file_has
         return False
 
 
-def validate_primary_key(df: DataFrame, primary_key: str):
-    duplicate_keys_df = df.groupBy(primary_key).agg(F.count("*").alias("count")) \
-                          .filter(F.col("count") > 1)
-
-    if duplicate_keys_df.count() > 0:
-        sample_keys = duplicate_keys_df.select(primary_key).limit(5).toPandas()[primary_key].tolist()
-        raise ValueError(f"Duplicate primary keys detected: {sample_keys}")
-
-    if df.filter(F.col(primary_key).isNull()).count() > 0:
-        raise ValueError("Found NULL primary keys — aborting load.")
-
-
-def write_or_merge_to_delta(spark: SparkSession, df: DataFrame, table_name: str, primary_key: str):
+def write_or_merge_to_delta(spark: SparkSession, df: DataFrame, table_name: str, primary_key: str = None):
     timestamp = F.date_format(F.current_timestamp(), "yyyy-MM-dd HH:mm:ss")
     df = df.withColumn("load_datetime", timestamp).withColumn("updated_datetime", timestamp)
 
@@ -52,16 +45,24 @@ def write_or_merge_to_delta(spark: SparkSession, df: DataFrame, table_name: str,
         df.write.format("delta").mode("overwrite").saveAsTable(table_name)
     else:
         delta_table = DeltaTable.forName(spark, table_name)
-        merge_condition = f"target.{primary_key} = source.{primary_key}"
-        update_condition = f"target.row_hash != source.row_hash"
+        if primary_key:
+            merge_condition = f"target.{primary_key} = source.{primary_key}"
+            update_condition = "target.row_hash != source.row_hash"
 
-        delta_table.alias("target").merge(
-            source=df.alias("source"),
-            condition=merge_condition
-        ).whenMatchedUpdate(
-            condition=update_condition,
-            set={col: f"source.{col}" for col in df.columns if col != "load_datetime"}
-        ).whenNotMatchedInsertAll().execute()
+            delta_table.alias("target").merge(
+                source=df.alias("source"),
+                condition=merge_condition
+            ).whenMatchedUpdate(
+                condition=update_condition,
+                set={col: f"source.{col}" for col in df.columns if col != "load_datetime"}
+            ).whenNotMatchedInsertAll().execute()
+        else:
+            merge_condition = "target.row_hash = source.row_hash"
+
+            delta_table.alias("target").merge(
+                source=df.alias("source"),
+                condition=merge_condition
+            ).whenNotMatchedInsertAll().execute()
 
 
 def log_file_load(spark: SparkSession, load_log_table: str, file_location: str, file_hash: str):
@@ -72,12 +73,12 @@ def log_file_load(spark: SparkSession, load_log_table: str, file_location: str, 
     new_log_entry.write.format("delta").mode("append").saveAsTable(load_log_table)
 
 
-# Main reusable function
+# Unified reusable function for files with or without primary key
 def load_csv_to_delta(spark: SparkSession, file_location: str, table_name: str,
-                      primary_key: str, load_log_table: str,
-                      infer_schema: str = "true", header: str = "true", delimiter: str = ","):
+                      load_log_table: str, primary_key: str = None, infer_schema: str = "true",
+                      header: str = "true", delimiter: str = ",", drop_index_column: bool = False):
 
-    df = read_csv_to_df(spark, file_location, infer_schema, header, delimiter)
+    df = read_csv_to_df(spark, file_location, infer_schema, header, delimiter, drop_index_column)
     df = hash_dataframe(df)
 
     file_hash = calculate_file_hash(df)
@@ -85,7 +86,6 @@ def load_csv_to_delta(spark: SparkSession, file_location: str, table_name: str,
         raise Exception("Duplicate file detected — skipping load.")
 
     df = df.dropDuplicates(["row_hash"])
-    validate_primary_key(df, primary_key)
     write_or_merge_to_delta(spark, df, table_name, primary_key)
     log_file_load(spark, load_log_table, file_location, file_hash)
 
@@ -93,9 +93,12 @@ def load_csv_to_delta(spark: SparkSession, file_location: str, table_name: str,
 # Example usage:
 if __name__ == "__main__":
     spark = SparkSession.builder.getOrCreate()
-    file_location = "/FileStore/tables/esource/v1/flatfiles/utility2_planned_der.csv"
-    table_name = "esource.utility2_planned_der_source"
-    primary_key = "INTERCONNECTION_QUEUE_REQUEST_ID"
-    load_log_table = "esource.load_log"
+    file_location = "/FileStore/tables/table_name.csv"
+    table_name = "schema.table_name"
+    load_log_table = "schema.load_log"
 
-    load_csv_to_delta(spark, file_location, table_name, primary_key, load_log_table)
+    # With primary key
+    load_csv_to_delta(spark, file_location, table_name, load_log_table, primary_key="ID")
+
+    # Without primary key
+    load_csv_to_delta(spark, file_location, table_name, load_log_table, header="false", drop_index_column=True)
