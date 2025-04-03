@@ -10,7 +10,7 @@ def db_init():
     spark.catalog.setCurrentDatabase("esource")
 
     version_tracking_table = f"{esource_schema}.version_tracking"
-    if not spark.catalog.tableExists(version_tracking_table_name):
+    if not spark.catalog.tableExists(version_tracking_table):
         tracking_schema = StructType([
             StructField("table_name", StringType(), False),
             StructField("last_processed_version", LongType(), False),
