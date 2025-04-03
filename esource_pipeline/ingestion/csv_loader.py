@@ -1,6 +1,7 @@
 import pyspark.sql.functions as F
 from delta.tables import DeltaTable
 from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql.types import StructType, StructField, StringType, LongType, TimestampType
 from datetime import datetime
 
 
@@ -32,8 +33,15 @@ def check_file_already_loaded(spark: SparkSession, load_log_table: str, file_has
         log_df = spark.table(load_log_table)
         return log_df.filter(F.col("file_hash") == file_hash).count() > 0
     else:
-        spark.createDataFrame([], schema="file_name STRING, file_hash STRING, load_time TIMESTAMP") \
-             .write.format("delta").mode("overwrite").saveAsTable(load_log_table)
+        # Redundant table creation
+        load_log_schema = StructType([
+            StructField("file_name", StringType(), False),
+            StructField("file_hash", LongType(), False),
+            StructField("load_time", TimestampType(), True)
+        ])
+        load_log_df = spark.createDataFrame([], schema=load_log_schema)
+        load_log_df.write.format("delta").mode("overwrite").saveAsTable(load_log_table)
+
         return False
 
 
@@ -99,7 +107,6 @@ if __name__ == "__main__":
     spark = SparkSession.builder.getOrCreate()
     file_location = "/FileStore/tables/table_name.csv"
     table_name = "schema.table_name"
-    load_log_table = "schema.load_log"
 
     # With primary key
     load_csv_to_delta(spark, file_location, table_name, load_log_table, primary_key="ID")
