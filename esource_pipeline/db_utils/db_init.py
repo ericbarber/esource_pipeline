@@ -27,7 +27,7 @@ def db_init():
             StructField("load_time", TimestampType(), True)
         ])
         load_log_df = spark.createDataFrame([], schema=load_log_schema)
-        load_log_df.write.format("delta").mode("overwrite").saveAsTable(load_log_table)
+        load_log_df.write.format("delta").mode("append").saveAsTable(load_log_table)
         
     print(
         "DATABASE INITIALIZED",
