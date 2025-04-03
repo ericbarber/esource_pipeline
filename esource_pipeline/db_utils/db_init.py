@@ -1,7 +1,7 @@
 from pyspark.sql import SparkSession
 spark = SparkSession.builder.getOrCreate()
 
-from pyspark.sql.types import StringType, LongType, TimestampType
+from pyspark.sql.types import StructType, StructField, StringType, LongType, TimestampType
 
 def db_init():
     # Initialize 
