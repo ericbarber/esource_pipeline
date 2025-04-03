@@ -33,7 +33,8 @@ def db_init():
         "DATABASE INITIALIZED",
         f"COMPLETE CREATE SCHEMA: {esource_schema}",
         f"COMPLETE CREATE TABLE: {load_log_table}"
-        f"COMPLETE CREATE TABLE: {version_tracking_table}"
+        f"COMPLETE CREATE TABLE: {version_tracking_table}",
+        sep='\n\t'
     )
 
     return True
