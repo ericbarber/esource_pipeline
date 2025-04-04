@@ -36,7 +36,7 @@ def check_file_already_loaded(spark: SparkSession, load_log_table: str, file_has
         # Redundant table creation
         load_log_schema = StructType([
             StructField("file_name", StringType(), False),
-            StructField("file_hash", LongType(), False),
+            StructField("file_hash", StringType(), False),
             StructField("load_time", TimestampType(), True)
         ])
         load_log_df = spark.createDataFrame([], schema=load_log_schema)
