@@ -114,7 +114,7 @@ if not spark.catalog.tableExists(version_tracking_table):
          .write.format("delta").mode("overwrite").saveAsTable(version_tracking_table)
 
 def get_last_processed_version(spark, table_name):
-    df = spark.table(version_tracking_table).filter(F.col("table_name") == table_name)
+    df = spark.table(version_tracking_table).filter(col("table_name") == table_name)
     records = df.collect()
     if records:
         return records[0]["last_processed_version"]
@@ -195,9 +195,8 @@ def incremental_processing():
             continue
 
         primary_column = "row_hash"
-        required_columns = ["CIRCUIT_ID", "SECTION_ID", ""]
-        target_primary_key = "line_hash"
-        clean_df, bad_records_df = run_data_quality_checks(incremental_df, primary_column, required_columns)
+        required_columns = ["CIRCUIT_ID", "SECTION_ID"]
+        clean_df, bad_records_df = run_data_quality_checks(incremental_df, primary_column, target_primary_key, required_columns)
 
         if not bad_records_df.isEmpty():
             bad_records_df.write.format("delta").mode("append") \
@@ -220,7 +219,7 @@ def incremental_processing():
             F.max("F_HCA_DATE").alias("hca_refresh_date"),  # same as max_hca_date
             F.sum("SHAPE_LENGTH").alias("shape_length"),
         )
-        #TODO: Try Except to catch incomplet updates, rollback version number in log
+
         # Write to target table
         if not spark.catalog.tableExists(target_table):
             circuit_data.write.format("delta").mode("overwrite").saveAsTable(target_table)
@@ -232,6 +231,3 @@ def incremental_processing():
 
         update_last_processed_version(spark, source_table, version)
         print(f"Successfully processed version {version}.")
-
-if __name__ == "__main__":
-    incremental_processing()
