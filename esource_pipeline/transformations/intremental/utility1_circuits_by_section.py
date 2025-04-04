@@ -195,7 +195,7 @@ def incremental_processing():
             continue
 
         primary_column = "row_hash"
-        required_columns = ["CIRCUIT_ID", "SECTION_ID", ""]
+        required_columns = ["CIRCUIT_ID", "SECTION_ID"]
         target_primary_key = "line_hash"
         clean_df, bad_records_df = run_data_quality_checks(incremental_df, primary_column, required_columns)
 
